@@ -13,14 +13,16 @@ class ApolloEnrichmentService
     public function __construct(array $config)
     {
         $this->client = new Client([
-            'base_uri' => $config['base_uri'] ?? 'https://api.apollo.io/v1',
+            'base_uri' => $config['base_uri'] ?? 'https://api.apollo.io/api/v1',
             'headers' => [
-                'Authorization' => 'Bearer '.($config['api_key'] ?? ''),
+                'x-api-key' => $config['api_key'] ?? '',
                 'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
                 'Cache-Control' => 'no-cache',
             ]
         ]);
     }
+
 
     /**
      * People Enrichment (Single)
@@ -130,12 +132,9 @@ class ApolloEnrichmentService
     public function bulkEnrichOrganizations(array $domains = []): array
     {
         try {
-            $response = $this->client->post('/organizations/bulk_enrich', [
-                'json' => [
-                    'domains' => $domains,
-                ],
-            ]);
+            $queryParams = http_build_query(['domains' => $domains], '', '&', PHP_QUERY_RFC3986);
 
+            $response = $this->client->post("https://api.apollo.io/api/v1/organizations/bulk_enrich?$queryParams");
             return json_decode($response->getBody()->getContents(), true);
         } catch (Exception $e) {
             return [
@@ -144,6 +143,8 @@ class ApolloEnrichmentService
             ];
         }
     }
+
+
 
 
 }

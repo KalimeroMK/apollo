@@ -26,13 +26,13 @@ class ApolloAccountService
     public function __construct(array $config)
     {
         $this->client = new Client([
-            'base_uri' => $config['base_uri'] ?? 'https://api.apollo.io/v1',
+            'base_uri' => $config['base_uri'] ?? 'https://api.apollo.io/api/v1',
             'headers' => [
-                'Authorization' => 'Bearer '.($config['api_key'] ?? ''),
+                'x-api-key' => $config['api_key'] ?? '',
                 'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
                 'Cache-Control' => 'no-cache',
-                'accept' => 'application/json',
-            ],
+            ]
         ]);
     }
 
