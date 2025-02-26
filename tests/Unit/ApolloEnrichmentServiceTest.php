@@ -2,166 +2,116 @@
 
 namespace Kalimeromk\Apollo\Tests\Unit;
 
-use GuzzleHttp\Client;
-use GuzzleHttp\Exception\GuzzleException;
-use GuzzleHttp\Psr7\Response;
+use Illuminate\Support\Facades\Http;
 use Kalimeromk\Apollo\ApolloEnrichmentService;
-use PHPUnit\Framework\MockObject\Exception;
-use PHPUnit\Framework\MockObject\MockObject;
-use PHPUnit\Framework\TestCase;
+use Orchestra\Testbench\TestCase;
 
 class ApolloEnrichmentServiceTest extends TestCase
 {
-    /**
-     * @var MockObject|Client
-     */
-    private $mockClient;
+    protected ApolloEnrichmentService $apolloService;
 
-    /**
-     * @var ApolloEnrichmentService
-     */
-    private ApolloEnrichmentService $service;
-
-    /**
-     * @throws Exception
-     */
     protected function setUp(): void
     {
         parent::setUp();
+        $this->apolloService = new ApolloEnrichmentService();
+    }
 
-        $this->mockClient = $this->createMock(Client::class);
-
-        // Initialize the service with fake config
-        $this->service = new ApolloEnrichmentService([
-            'api_key'  => 'test_api_key',
-            'base_uri' => 'https://api.apollo.io/v1'
+    /** @test */
+    public function it_can_enrich_a_person()
+    {
+        Http::fake([
+            'https://api.apollo.io/api/v1/people/match' => Http::response([
+                'success' => true,
+                'data' => ['name' => 'John Doe']
+            ], 200),
         ]);
 
-        // Inject the mock Guzzle client into the service
-        $reflection = new \ReflectionClass($this->service);
-        $clientProp = $reflection->getProperty('client');
-        $clientProp->setAccessible(true);
-        $clientProp->setValue($this->service, $this->mockClient);
+        $response = $this->apolloService->enrichPerson(['first_name' => 'John', 'domain' => 'example.com']);
+
+        $this->assertIsArray($response);
+        $this->assertTrue($response['success']);
+        $this->assertEquals('John Doe', $response['data']['name']);
     }
 
-    /**
-     * @throws GuzzleException
-     */
-    public function testEnrichPersonSuccess()
+    /** @test */
+    public function it_can_bulk_enrich_people()
     {
-        // Prepare a mock JSON response
-        $mockApiResponse = [
-            'person' => [
-                'id' => 'fake-id',
-                'name' => 'Test Person'
-            ]
-        ];
-
-        // Configure mock client to return a 200 response with our JSON
-        $this->mockClient->expects($this->once())
-            ->method('post')
-            ->with('/people/match', $this->anything()) // We could assert specific 'json' and 'query'
-            ->willReturn(new Response(200, [], json_encode($mockApiResponse)));
-
-        // Call the method
-        $result = $this->service->enrichPerson([
-            'first_name' => 'Test',
-            'domain'     => 'example.com'
+        Http::fake([
+            'https://api.apollo.io/api/v1/people/bulk_match' => Http::response([
+                'success' => true,
+                'data' => [['name' => 'Jane Doe']]
+            ], 200),
         ]);
 
-        // Assert we got the mock response data
-        $this->assertArrayHasKey('person', $result);
-        $this->assertEquals('Test Person', $result['person']['name']);
-    }
-
-    /**
-     * @throws GuzzleException
-     */
-    public function testEnrichPersonException()
-    {
-        // Simulate a Guzzle exception
-        $this->mockClient->method('post')
-            ->willThrowException(new \Exception('Something went wrong'));
-
-        $result = $this->service->enrichPerson([
-            'first_name' => 'Fail',
-            'domain'     => 'error.com'
+        $response = $this->apolloService->bulkEnrichPeople([
+            ['first_name' => 'Jane', 'domain' => 'example.com']
         ]);
 
-        $this->assertTrue($result['error']);
-        $this->assertStringContainsString('Something went wrong', $result['message']);
+        $this->assertIsArray($response);
+        $this->assertTrue($response['success']);
+        $this->assertEquals('Jane Doe', $response['data'][0]['name']);
     }
 
-    /**
-     * @throws GuzzleException
-     */
-    public function testBulkEnrichPeopleSuccess()
+    /** @test */
+    public function it_can_enrich_an_organization()
     {
-        $mockApiResponse = [
-            'bulk_result' => [
-                ['person' => 'Person A'],
-                ['person' => 'Person B']
-            ]
-        ];
-
-        $this->mockClient->expects($this->once())
-            ->method('post')
-            ->with('/people/bulk_match', $this->anything())
-            ->willReturn(new Response(200, [], json_encode($mockApiResponse)));
-
-        $peopleData = [
-            ['first_name' => 'Alice', 'domain' => 'example.com'],
-            ['first_name' => 'Bob',   'domain' => 'example.org']
-        ];
-
-        $result = $this->service->bulkEnrichPeople($peopleData);
-        $this->assertArrayHasKey('bulk_result', $result);
-        $this->assertCount(2, $result['bulk_result']);
-    }
-
-    public function testEnrichOrganizationSuccess()
-    {
-        $mockApiResponse = [
-            'organization' => [
-                'id'   => 'org-123',
-                'name' => 'Fake Org'
-            ]
-        ];
-
-        $this->mockClient->expects($this->once())
-            ->method('post')
-            ->with('/organizations/enrich', $this->anything())
-            ->willReturn(new Response(200, [], json_encode($mockApiResponse)));
-
-        $result = $this->service->enrichOrganization([
-            'domain' => 'fakeorg.com'
+        Http::fake([
+            'https://api.apollo.io/api/v1/organizations/enrich' => Http::response([
+                'success' => true,
+                'data' => ['company' => 'Example Corp']
+            ], 200),
         ]);
 
-        $this->assertArrayHasKey('organization', $result);
-        $this->assertEquals('Fake Org', $result['organization']['name']);
+        $response = $this->apolloService->enrichOrganization(['domain' => 'example.com']);
+
+        $this->assertIsArray($response);
+        $this->assertTrue($response['success']);
+        $this->assertEquals('Example Corp', $response['data']['company']);
     }
 
-    /**
-     * @throws GuzzleException
-     */
-    public function testBulkEnrichOrganizationsSuccess()
+    /** @test */
+    public function it_can_bulk_enrich_organizations()
     {
-        $mockApiResponse = [
-            'organizations' => [
-                ['domain' => 'apollo.io'],
-                ['domain' => 'microsoft.com']
-            ]
-        ];
+        Http::fake([
+            'https://api.apollo.io/api/v1/organizations/bulk_enrich' => Http::response([
+                'success' => true,
+                'data' => [['company' => 'Example Corp']]
+            ], 200),
+        ]);
 
-        $this->mockClient->expects($this->once())
-            ->method('post')
-            ->with('/organizations/bulk_enrich', $this->anything())
-            ->willReturn(new Response(200, [], json_encode($mockApiResponse)));
+        $response = $this->apolloService->bulkEnrichOrganizations(['ogledalo.mk']);
 
-        $domains = ['apollo.io', 'microsoft.com'];
-        $result = $this->service->bulkEnrichOrganizations($domains);
+        $this->assertIsArray($response);
+        $this->assertTrue($response['success']);
+        $this->assertEquals('Example Corp', $response['data'][0]['company']);
+    }
 
-        $this->assertArrayHasKey('organizations', $result);
-        $this->assertCount(2, $result['organizations']);
+    /** @test */
+    public function it_handles_api_errors()
+    {
+        Http::fake([
+            '*' => Http::response(['error' => true, 'message' => 'API error'], 500),
+        ]);
+
+        $response = $this->apolloService->enrichPerson(['first_name' => 'John', 'domain' => 'example.com']);
+
+        $this->assertIsArray($response);
+        $this->assertTrue($response['error']);
+        $this->assertEquals('API error', $response['message']);
+    }
+
+    /** @test */
+    public function it_can_hit_live_api_to_search_for_a_domain()
+    {
+        $domain = 'youtube.com'; // Change this to a real domain if needed
+
+        $response = $this->apolloService->enrichOrganization(['domain' => $domain]);
+        $this->assertIsArray($response);
+        $this->assertArrayHasKey('organization', $response);
+
+        // Ensure the response contains company-related data
+        if (isset($response['organization']['name'])) {
+            $this->assertNotEmpty($response['organization']['name']);
+        }
     }
 }
